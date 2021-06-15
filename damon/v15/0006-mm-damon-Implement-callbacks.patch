@@ -1,0 +1,117 @@
+From 504431f9a0a033bd4b1b844ffb10ce34cd36d60b Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Wed, 27 May 2020 13:08:40 +0000
+Subject: [PATCH v15 06/14] mm/damon: Implement callbacks
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    aarcange@redhat.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendan.d.gregg@gmail.com,
+    brendanhiggins@google.com,
+    cai@lca.pw,
+    colin.king@canonical.com,
+    corbet@lwn.net,
+    dwmw@amazon.com,
+    foersleo@amazon.de,
+    irogers@google.com,
+    jolsa@redhat.com,
+    kirill@shutemov.name,
+    mark.rutland@arm.com,
+    mgorman@suse.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    rdunlap@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    sblbir@amazon.com,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sj38.park@gmail.com,
+    snu@amazon.de,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    yang.shi@linux.alibaba.com,
+    ying.huang@intel.com,
+    david@redhat.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+This commit implements callbacks for DAMON.  Using this, DAMON users can
+install their callbacks for each step of the access monitoring so that
+they can do something interesting with the monitored access patterns
+online.  For example, callbacks can report the monitored patterns to
+users or do some access pattern based memory management such as
+proactive reclamations or access pattern based THP promotions/demotions
+decision makings.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+Reviewed-by: Leonard Foerster <foersleo@amazon.de>
+---
+ include/linux/damon.h | 13 +++++++++++++
+ mm/damon.c            |  4 ++++
+ 2 files changed, 17 insertions(+)
+
+diff --git a/include/linux/damon.h b/include/linux/damon.h
+index 5afcb2bb7f77..12536d9d2f74 100644
+--- a/include/linux/damon.h
++++ b/include/linux/damon.h
+@@ -80,6 +80,15 @@ struct damon_task {
+  * @kdamond_lock.  Accesses to other fields must be protected by themselves.
+  *
+  * @tasks_list:		Head of monitoring target tasks (&damon_task) list.
++ *
++ * @sample_cb:			Called for each sampling interval.
++ * @aggregate_cb:		Called for each aggregation interval.
++ *
++ * @sample_cb and @aggregate_cb are called from @kdamond for each of the
++ * sampling intervals and aggregation intervals, respectively.  Therefore,
++ * users can safely access to the monitoring results via @tasks_list without
++ * additional protection of @kdamond_lock.  For the reason, users are
++ * recommended to use these callback for the accesses to the results.
+  */
+ struct damon_ctx {
+ 	unsigned long sample_interval;
+@@ -96,6 +105,10 @@ struct damon_ctx {
+ 	struct mutex kdamond_lock;
+ 
+ 	struct list_head tasks_list;	/* 'damon_task' objects */
++
++	/* callbacks */
++	void (*sample_cb)(struct damon_ctx *context);
++	void (*aggregate_cb)(struct damon_ctx *context);
+ };
+ 
+ int damon_set_pids(struct damon_ctx *ctx, int *pids, ssize_t nr_pids);
+diff --git a/mm/damon.c b/mm/damon.c
+index 778f4d87042d..1978ec4114bf 100644
+--- a/mm/damon.c
++++ b/mm/damon.c
+@@ -880,6 +880,8 @@ static int kdamond_fn(void *data)
+ 	kdamond_init_regions(ctx);
+ 	while (!kdamond_need_stop(ctx)) {
+ 		kdamond_prepare_access_checks(ctx);
++		if (ctx->sample_cb)
++			ctx->sample_cb(ctx);
+ 
+ 		usleep_range(ctx->sample_interval, ctx->sample_interval + 1);
+ 
+@@ -887,6 +889,8 @@ static int kdamond_fn(void *data)
+ 
+ 		if (kdamond_aggregate_interval_passed(ctx)) {
+ 			kdamond_merge_regions(ctx, max_nr_accesses / 10);
++			if (ctx->aggregate_cb)
++				ctx->aggregate_cb(ctx);
+ 			kdamond_reset_aggregated(ctx);
+ 			kdamond_split_regions(ctx);
+ 		}
+-- 
+2.17.1
+
