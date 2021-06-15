@@ -1,0 +1,143 @@
+From 31b2f7a269ea72d536a22b817779f8b0334228d5 Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Thu, 22 Apr 2021 07:26:39 +0000
+Subject: [RFC PATCH 01/13] mm/damon/paddr: Support the pageout scheme
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendanhiggins@google.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    elver@google.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    greg@kroah.com,
+    gthelen@google.com,
+    guoju.fgj@alibaba-inc.com,
+    mgorman@suse.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sj38.park@gmail.com,
+    snu@zelle79.org,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+This commit makes the DAMON primitives for physical address space to
+support the pageout action for DAMON-based Operation Schemes.  IOW, now
+the users can implement their own data access-aware reclamations for
+whole system using DAMOS.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+---
+ mm/damon/paddr.c        | 38 +++++++++++++++++++++++++++++++++++++-
+ mm/damon/prmtv-common.c |  2 +-
+ mm/damon/prmtv-common.h |  2 ++
+ 3 files changed, 40 insertions(+), 2 deletions(-)
+
+diff --git a/mm/damon/paddr.c b/mm/damon/paddr.c
+index b92b07a3ce53..303db372e53b 100644
+--- a/mm/damon/paddr.c
++++ b/mm/damon/paddr.c
+@@ -7,6 +7,9 @@
+ 
+ #define pr_fmt(fmt) "damon-pa: " fmt
+ 
++#include <linux/swap.h>
++
++#include "../internal.h"
+ #include "prmtv-common.h"
+ 
+ /*
+@@ -85,6 +88,39 @@ bool damon_pa_target_valid(void *t)
+ 	return true;
+ }
+ 
++int damon_pa_apply_scheme(struct damon_ctx *ctx, struct damon_target *t,
++		struct damon_region *r, struct damos *scheme)
++{
++	unsigned long addr;
++	LIST_HEAD(page_list);
++
++	if (scheme->action != DAMOS_PAGEOUT)
++		return -EINVAL;
++
++	for (addr = r->ar.start; addr < r->ar.end; addr += PAGE_SIZE) {
++		struct page *page = damon_get_page(PHYS_PFN(addr));
++
++		if (!page)
++			continue;
++
++		ClearPageReferenced(page);
++		test_and_clear_page_young(page);
++		if (isolate_lru_page(page)) {
++			put_page(page);
++			continue;
++		}
++		if (PageUnevictable(page)) {
++			putback_lru_page(page);
++		} else {
++			list_add(&page->lru, &page_list);
++			put_page(page);
++		}
++	}
++	reclaim_pages(&page_list);
++	cond_resched();
++	return 0;
++}
++
+ void damon_pa_set_primitives(struct damon_ctx *ctx)
+ {
+ 	ctx->primitive.init = NULL;
+@@ -94,5 +130,5 @@ void damon_pa_set_primitives(struct damon_ctx *ctx)
+ 	ctx->primitive.reset_aggregated = NULL;
+ 	ctx->primitive.target_valid = damon_pa_target_valid;
+ 	ctx->primitive.cleanup = NULL;
+-	ctx->primitive.apply_scheme = NULL;
++	ctx->primitive.apply_scheme = damon_pa_apply_scheme;
+ }
+diff --git a/mm/damon/prmtv-common.c b/mm/damon/prmtv-common.c
+index 08e9318d67ed..01c1c1b37859 100644
+--- a/mm/damon/prmtv-common.c
++++ b/mm/damon/prmtv-common.c
+@@ -14,7 +14,7 @@
+  * The body of this function is stolen from the 'page_idle_get_page()'.  We
+  * steal rather than reuse it because the code is quite simple.
+  */
+-static struct page *damon_get_page(unsigned long pfn)
++struct page *damon_get_page(unsigned long pfn)
+ {
+ 	struct page *page = pfn_to_online_page(pfn);
+ 
+diff --git a/mm/damon/prmtv-common.h b/mm/damon/prmtv-common.h
+index 939c41af6b59..ba0c4eecbb79 100644
+--- a/mm/damon/prmtv-common.h
++++ b/mm/damon/prmtv-common.h
+@@ -18,6 +18,8 @@
+ /* Get a random number in [l, r) */
+ #define damon_rand(l, r) (l + prandom_u32_max(r - l))
+ 
++struct page *damon_get_page(unsigned long pfn);
++
+ void damon_va_mkold(struct mm_struct *mm, unsigned long addr);
+ bool damon_va_young(struct mm_struct *mm, unsigned long addr,
+ 			unsigned long *page_sz);
+-- 
+2.17.1
+

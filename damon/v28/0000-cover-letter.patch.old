@@ -1,0 +1,120 @@
+From 14600ed6d1d3af470e7d36de97098c5325002da2 Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Tue, 13 Apr 2021 10:01:06 +0000
+Subject: [PATCH v28 00/13] *** SUBJECT HERE ***
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendanhiggins@google.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    elver@google.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    greg@kroah.com,
+    gthelen@google.com,
+    guoju.fgj@alibaba-inc.com,
+    mgorman@suse.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sj38.park@gmail.com,
+    snu@amazon.de,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+*** BLURB HERE ***
+
+SeongJae Park (13):
+  mm: Introduce Data Access MONitor (DAMON)
+  mm/damon/core: Implement region-based sampling
+  mm/damon: Adaptively adjust regions
+  mm/idle_page_tracking: Make PG_idle reusable
+  mm/damon: Implement primitives for the virtual memory address spaces
+  mm/damon: Add a tracepoint
+  mm/damon: Implement a debugfs-based user space interface
+  mm/damon/dbgfs: Export kdamond pid to the user space
+  mm/damon/dbgfs: Support multiple contexts
+  Documentation: Add documents for DAMON
+  mm/damon: Add kunit tests
+  mm/damon: Add user space selftests
+  MAINTAINERS: Update for DAMON
+
+ Documentation/admin-guide/mm/damon/guide.rst  | 158 ++++
+ Documentation/admin-guide/mm/damon/index.rst  |  15 +
+ Documentation/admin-guide/mm/damon/plans.rst  |  29 +
+ Documentation/admin-guide/mm/damon/start.rst  | 114 +++
+ Documentation/admin-guide/mm/damon/usage.rst  | 112 +++
+ Documentation/admin-guide/mm/index.rst        |   1 +
+ Documentation/vm/damon/api.rst                |  20 +
+ Documentation/vm/damon/design.rst             | 166 ++++
+ Documentation/vm/damon/eval.rst               | 232 ++++++
+ Documentation/vm/damon/faq.rst                |  58 ++
+ Documentation/vm/damon/index.rst              |  31 +
+ Documentation/vm/index.rst                    |   1 +
+ MAINTAINERS                                   |  12 +
+ include/linux/damon.h                         | 265 +++++++
+ include/linux/page-flags.h                    |   4 +-
+ include/linux/page_ext.h                      |   2 +-
+ include/linux/page_idle.h                     |   6 +-
+ include/trace/events/damon.h                  |  43 ++
+ include/trace/events/mmflags.h                |   2 +-
+ mm/Kconfig                                    |  11 +
+ mm/Makefile                                   |   1 +
+ mm/damon/Kconfig                              |  69 ++
+ mm/damon/Makefile                             |   5 +
+ mm/damon/core-test.h                          | 253 ++++++
+ mm/damon/core.c                               | 718 ++++++++++++++++++
+ mm/damon/dbgfs-test.h                         | 126 +++
+ mm/damon/dbgfs.c                              | 615 +++++++++++++++
+ mm/damon/vaddr-test.h                         | 328 ++++++++
+ mm/damon/vaddr.c                              | 623 +++++++++++++++
+ mm/page_ext.c                                 |  12 +-
+ mm/page_idle.c                                |  10 -
+ tools/testing/selftests/damon/Makefile        |   7 +
+ .../selftests/damon/_chk_dependency.sh        |  28 +
+ .../testing/selftests/damon/debugfs_attrs.sh  |  98 +++
+ 34 files changed, 4157 insertions(+), 18 deletions(-)
+ create mode 100644 Documentation/admin-guide/mm/damon/guide.rst
+ create mode 100644 Documentation/admin-guide/mm/damon/index.rst
+ create mode 100644 Documentation/admin-guide/mm/damon/plans.rst
+ create mode 100644 Documentation/admin-guide/mm/damon/start.rst
+ create mode 100644 Documentation/admin-guide/mm/damon/usage.rst
+ create mode 100644 Documentation/vm/damon/api.rst
+ create mode 100644 Documentation/vm/damon/design.rst
+ create mode 100644 Documentation/vm/damon/eval.rst
+ create mode 100644 Documentation/vm/damon/faq.rst
+ create mode 100644 Documentation/vm/damon/index.rst
+ create mode 100644 include/linux/damon.h
+ create mode 100644 include/trace/events/damon.h
+ create mode 100644 mm/damon/Kconfig
+ create mode 100644 mm/damon/Makefile
+ create mode 100644 mm/damon/core-test.h
+ create mode 100644 mm/damon/core.c
+ create mode 100644 mm/damon/dbgfs-test.h
+ create mode 100644 mm/damon/dbgfs.c
+ create mode 100644 mm/damon/vaddr-test.h
+ create mode 100644 mm/damon/vaddr.c
+ create mode 100644 tools/testing/selftests/damon/Makefile
+ create mode 100644 tools/testing/selftests/damon/_chk_dependency.sh
+ create mode 100755 tools/testing/selftests/damon/debugfs_attrs.sh
+
+-- 
+2.17.1
+

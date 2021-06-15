@@ -1,0 +1,75 @@
+From b88bb9706d8c20dc2f3c4987d13155ff5be9a40c Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Fri, 7 May 2021 07:37:51 +0000
+Subject: [RFC v2 05/14] mm/damon/selftests: Support schemes speed limit
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendanhiggins@google.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    elver@google.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    greg@kroah.com,
+    gthelen@google.com,
+    guoju.fgj@alibaba-inc.com,
+    jgowans@amazon.com,
+    mgorman@suse.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sj38.park@gmail.com,
+    snu@zelle79.org,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+This commit updates DAMON selftests to support updated schemes debugfs
+file format.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+---
+ tools/testing/selftests/damon/debugfs_attrs.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/testing/selftests/damon/debugfs_attrs.sh b/tools/testing/selftests/damon/debugfs_attrs.sh
+index 61fd3e5598e9..012b0c1fdbd3 100755
+--- a/tools/testing/selftests/damon/debugfs_attrs.sh
++++ b/tools/testing/selftests/damon/debugfs_attrs.sh
+@@ -101,7 +101,7 @@ echo $ORIG_CONTENT > $file
+ file="$DBGFS/schemes"
+ 
+ ORIG_CONTENT=$(cat $file)
+-echo "1 2 3 4 5 6 3" > $file
++echo "1 2 3 4 5 6 3 0 0" > $file
+ if [ $? -ne 0 ]
+ then
+ 	echo "$file write fail"
+@@ -110,7 +110,7 @@ then
+ fi
+ 
+ echo "1 2
+-3 4 5 6 3" > $file
++3 4 5 6 3 0 0" > $file
+ if [ $? -eq 0 ]
+ then
+ 	echo "$file multi line write success (expected fail)"
+-- 
+2.17.1
+

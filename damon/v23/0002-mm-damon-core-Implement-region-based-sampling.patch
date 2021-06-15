@@ -1,0 +1,458 @@
+From 7fc3402f55f41650b385a46cfedf13421881f567 Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Wed, 9 Dec 2020 13:12:04 +0000
+Subject: [PATCH v23 02/15] mm/damon/core: Implement region-based sampling
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    aarcange@redhat.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendan.d.gregg@gmail.com,
+    brendanhiggins@google.com,
+    cai@lca.pw,
+    colin.king@canonical.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    elver@google.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    gthelen@google.com,
+    irogers@google.com,
+    jolsa@redhat.com,
+    kirill@shutemov.name,
+    mark.rutland@arm.com,
+    mgorman@suse.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    rdunlap@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    sblbir@amazon.com,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sj38.park@gmail.com,
+    snu@amazon.de,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    yang.shi@linux.alibaba.com,
+    ying.huang@intel.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+To avoid the unbounded increase of the overhead, DAMON groups adjacent
+pages that assumed to have the same access frequencies into a region.
+As long as the assumption (pages in a region have the same access
+frequencies) is kept, only one page in the region is required to be
+checked.  Thus, for each ``sampling interval``,
+
+ 1. the 'prepare_access_checks' primitive picks one page in each region,
+ 2. waits for one ``sampling interval``,
+ 3. checks whether the page is accessed meanwhile, and
+ 4. increases the access frequency of the region if so.
+
+Therefore, the monitoring overhead is controllable by adjusting the
+number of regions.  DAMON allows both the underlying primitives and user
+callbacks adjust regions for the trade-off.  In other words, this commit
+makes DAMON to use not only time-based sampling but also space-based
+sampling.
+
+This scheme, however, cannot preserve the quality of the output if the
+assumption is not guaranteed.  Next commit will address this problem.
+
+Another problem of this region abstraction is additional memory space
+overhead for the regions metadata.  For example, suppose page
+granularity monitoring that doesn't want to know fine-grained access
+frequency but only if each page accessed or not.  Then, we can do that
+by directly resetting and reading the PG_Idle flags and/or the PTE
+Accessed bits.  The metadata for the region abstraction is only burden
+in the case.  For the reason, this commit makes DAMON to support the
+user-defined arbitrary target, which could be stored in a void pointer
+of the monitoring context with specific target type.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+Reviewed-by: Leonard Foerster <foersleo@amazon.de>
+---
+ include/linux/damon.h | 109 ++++++++++++++++++++++++++++++--
+ mm/damon/core.c       | 142 +++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 243 insertions(+), 8 deletions(-)
+
+diff --git a/include/linux/damon.h b/include/linux/damon.h
+index 387fa4399fc8..7d4685adc8a9 100644
+--- a/include/linux/damon.h
++++ b/include/linux/damon.h
+@@ -12,6 +12,48 @@
+ #include <linux/time64.h>
+ #include <linux/types.h>
+ 
++/**
++ * struct damon_addr_range - Represents an address region of [@start, @end).
++ * @start:	Start address of the region (inclusive).
++ * @end:	End address of the region (exclusive).
++ */
++struct damon_addr_range {
++	unsigned long start;
++	unsigned long end;
++};
++
++/**
++ * struct damon_region - Represents a monitoring target region.
++ * @ar:			The address range of the region.
++ * @sampling_addr:	Address of the sample for the next access check.
++ * @nr_accesses:	Access frequency of this region.
++ * @list:		List head for siblings.
++ */
++struct damon_region {
++	struct damon_addr_range ar;
++	unsigned long sampling_addr;
++	unsigned int nr_accesses;
++	struct list_head list;
++};
++
++/**
++ * struct damon_target - Represents a monitoring target.
++ * @id:			Unique identifier for this target.
++ * @regions_list:	Head of the monitoring target regions of this target.
++ * @list:		List head for siblings.
++ *
++ * Each monitoring context could have multiple targets.  For example, a context
++ * for virtual memory address spaces could have multiple target processes.  The
++ * @id of each target should be unique among the targets of the context.  For
++ * example, in the virtual address monitoring context, it could be a pidfd or
++ * an address of an mm_struct.
++ */
++struct damon_target {
++	unsigned long id;
++	struct list_head regions_list;
++	struct list_head list;
++};
++
+ struct damon_ctx;
+ 
+ /**
+@@ -36,7 +78,8 @@ struct damon_ctx;
+  *
+  * @init_target_regions should construct proper monitoring target regions and
+  * link those to the DAMON context struct.  The regions should be defined by
+- * user and saved in @damon_ctx.target.
++ * user and saved in @damon_ctx.arbitrary_target if @damon_ctx.target_type is
++ * &DAMON_ARBITRARY_TARGET.  Otherwise, &struct damon_region should be used.
+  * @update_target_regions should update the monitoring target regions for
+  * current status.
+  * @prepare_access_checks should manipulate the monitoring regions to be
+@@ -46,7 +89,8 @@ struct damon_ctx;
+  * @reset_aggregated should reset the access monitoring results that aggregated
+  * by @check_accesses.
+  * @target_valid should check whether the target is still valid for the
+- * monitoring.
++ * monitoring.  It receives &damon_ctx.arbitrary_target or &struct damon_target
++ * pointer depends on &damon_ctx.target_type.
+  * @cleanup is called from @kdamond just before its termination.  After this
+  * call, only @kdamond_lock and @kdamond will be touched.
+  */
+@@ -91,6 +135,17 @@ struct damon_callback {
+ 	int (*before_terminate)(struct damon_ctx *context);
+ };
+ 
++/**
++ * enum damon_target_type - Represents the type of the monitoring target.
++ *
++ * @DAMON_REGION_SAMPLING_TARGET:	Region based sampling target.
++ * @DAMON_ARBITRARY_TARGET:		User-defined arbitrary type target.
++ */
++enum damon_target_type {
++	DAMON_REGION_SAMPLING_TARGET,
++	DAMON_ARBITRARY_TARGET,
++};
++
+ /**
+  * struct damon_ctx - Represents a context for each monitoring.  This is the
+  * main interface that allows users to set the attributes and get the results
+@@ -130,7 +185,15 @@ struct damon_callback {
+  * @primitive:	Set of monitoring primitives for given use cases.
+  * @callback:	Set of callbacks for monitoring events notifications.
+  *
+- * @target:	Pointer to the user-defined monitoring target.
++ * @target_type:	Type of the monitoring target.
++ *
++ * @region_targets:	Head of monitoring targets (&damon_target) list.
++ *
++ * @arbitrary_target:	Pointer to arbitrary type target.
++ *
++ * @region_targets are valid only if @target_type is
++ * DAMON_REGION_SAMPLING_TARGET.  @arbitrary_target is valid only if
++ * @target_type is DAMON_ARBITRARY_TARGET.
+  */
+ struct damon_ctx {
+ 	unsigned long sample_interval;
+@@ -149,12 +212,48 @@ struct damon_ctx {
+ 	struct damon_primitive primitive;
+ 	struct damon_callback callback;
+ 
+-	void *target;
++	enum damon_target_type target_type;
++	union {
++		/* DAMON_REGION_SAMPLING_TARGET */
++		struct list_head region_targets;
++
++		/* DAMON_ARBITRARY_TARGET */
++		void *arbitrary_target;
++	};
+ };
+ 
++#define damon_next_region(r) \
++	(container_of(r->list.next, struct damon_region, list))
++
++#define damon_prev_region(r) \
++	(container_of(r->list.prev, struct damon_region, list))
++
++#define damon_for_each_region(r, t) \
++	list_for_each_entry(r, &t->regions_list, list)
++
++#define damon_for_each_region_safe(r, next, t) \
++	list_for_each_entry_safe(r, next, &t->regions_list, list)
++
++#define damon_for_each_target(t, ctx) \
++	list_for_each_entry(t, &(ctx)->region_targets, list)
++
++#define damon_for_each_target_safe(t, next, ctx)	\
++	list_for_each_entry_safe(t, next, &(ctx)->region_targets, list)
++
+ #ifdef CONFIG_DAMON
+ 
+-struct damon_ctx *damon_new_ctx(void);
++struct damon_region *damon_new_region(unsigned long start, unsigned long end);
++inline void damon_insert_region(struct damon_region *r,
++		struct damon_region *prev, struct damon_region *next);
++void damon_add_region(struct damon_region *r, struct damon_target *t);
++void damon_destroy_region(struct damon_region *r);
++
++struct damon_target *damon_new_target(unsigned long id);
++void damon_add_target(struct damon_ctx *ctx, struct damon_target *t);
++void damon_free_target(struct damon_target *t);
++void damon_destroy_target(struct damon_target *t);
++
++struct damon_ctx *damon_new_ctx(enum damon_target_type type);
+ void damon_destroy_ctx(struct damon_ctx *ctx);
+ int damon_set_attrs(struct damon_ctx *ctx, unsigned long sample_int,
+ 		unsigned long aggr_int, unsigned long regions_update_int);
+diff --git a/mm/damon/core.c b/mm/damon/core.c
+index 8963804efdf9..167487e75737 100644
+--- a/mm/damon/core.c
++++ b/mm/damon/core.c
+@@ -15,7 +15,102 @@
+ static DEFINE_MUTEX(damon_lock);
+ static int nr_running_ctxs;
+ 
+-struct damon_ctx *damon_new_ctx(void)
++/*
++ * Construct a damon_region struct
++ *
++ * Returns the pointer to the new struct if success, or NULL otherwise
++ */
++struct damon_region *damon_new_region(unsigned long start, unsigned long end)
++{
++	struct damon_region *region;
++
++	region = kmalloc(sizeof(*region), GFP_KERNEL);
++	if (!region)
++		return NULL;
++
++	region->ar.start = start;
++	region->ar.end = end;
++	region->nr_accesses = 0;
++	INIT_LIST_HEAD(&region->list);
++
++	return region;
++}
++
++/*
++ * Add a region between two other regions
++ */
++inline void damon_insert_region(struct damon_region *r,
++		struct damon_region *prev, struct damon_region *next)
++{
++	__list_add(&r->list, &prev->list, &next->list);
++}
++
++void damon_add_region(struct damon_region *r, struct damon_target *t)
++{
++	list_add_tail(&r->list, &t->regions_list);
++}
++
++static void damon_del_region(struct damon_region *r)
++{
++	list_del(&r->list);
++}
++
++static void damon_free_region(struct damon_region *r)
++{
++	kfree(r);
++}
++
++void damon_destroy_region(struct damon_region *r)
++{
++	damon_del_region(r);
++	damon_free_region(r);
++}
++
++/*
++ * Construct a damon_target struct
++ *
++ * Returns the pointer to the new struct if success, or NULL otherwise
++ */
++struct damon_target *damon_new_target(unsigned long id)
++{
++	struct damon_target *t;
++
++	t = kmalloc(sizeof(*t), GFP_KERNEL);
++	if (!t)
++		return NULL;
++
++	t->id = id;
++	INIT_LIST_HEAD(&t->regions_list);
++
++	return t;
++}
++
++void damon_add_target(struct damon_ctx *ctx, struct damon_target *t)
++{
++	list_add_tail(&t->list, &ctx->region_targets);
++}
++
++static void damon_del_target(struct damon_target *t)
++{
++	list_del(&t->list);
++}
++
++void damon_free_target(struct damon_target *t)
++{
++	struct damon_region *r, *next;
++
++	damon_for_each_region_safe(r, next, t)
++		damon_free_region(r);
++	kfree(t);
++}
++
++void damon_destroy_target(struct damon_target *t)
++{
++	damon_del_target(t);
++	damon_free_target(t);
++}
++
++struct damon_ctx *damon_new_ctx(enum damon_target_type type)
+ {
+ 	struct damon_ctx *ctx;
+ 
+@@ -32,13 +127,20 @@ struct damon_ctx *damon_new_ctx(void)
+ 
+ 	mutex_init(&ctx->kdamond_lock);
+ 
+-	ctx->target = NULL;
++	ctx->target_type = type;
++	if (type != DAMON_ARBITRARY_TARGET)
++		INIT_LIST_HEAD(&ctx->region_targets);
+ 
+ 	return ctx;
+ }
+ 
+ void damon_destroy_ctx(struct damon_ctx *ctx)
+ {
++	struct damon_target *t, *next_t;
++
++	damon_for_each_target_safe(t, next_t, ctx)
++		damon_destroy_target(t);
++
+ 	kfree(ctx);
+ }
+ 
+@@ -215,6 +317,21 @@ static bool kdamond_aggregate_interval_passed(struct damon_ctx *ctx)
+ 			ctx->aggr_interval);
+ }
+ 
++/*
++ * Reset the aggregated monitoring results ('nr_accesses' of each region).
++ */
++static void kdamond_reset_aggregated(struct damon_ctx *c)
++{
++	struct damon_target *t;
++
++	damon_for_each_target(t, c) {
++		struct damon_region *r;
++
++		damon_for_each_region(r, t)
++			r->nr_accesses = 0;
++	}
++}
++
+ /*
+  * Check whether it is time to check and apply the target monitoring regions
+  *
+@@ -236,6 +353,7 @@ static bool kdamond_need_update_regions(struct damon_ctx *ctx)
+  */
+ static bool kdamond_need_stop(struct damon_ctx *ctx)
+ {
++	struct damon_target *t;
+ 	bool stop;
+ 
+ 	mutex_lock(&ctx->kdamond_lock);
+@@ -247,7 +365,15 @@ static bool kdamond_need_stop(struct damon_ctx *ctx)
+ 	if (!ctx->primitive.target_valid)
+ 		return false;
+ 
+-	return !ctx->primitive.target_valid(ctx->target);
++	if (ctx->target_type == DAMON_ARBITRARY_TARGET)
++		return !ctx->primitive.target_valid(ctx->arbitrary_target);
++
++	damon_for_each_target(t, ctx) {
++		if (ctx->primitive.target_valid(t))
++			return false;
++	}
++
++	return true;
+ }
+ 
+ static void set_kdamond_stop(struct damon_ctx *ctx)
+@@ -263,6 +389,8 @@ static void set_kdamond_stop(struct damon_ctx *ctx)
+ static int kdamond_fn(void *data)
+ {
+ 	struct damon_ctx *ctx = (struct damon_ctx *)data;
++	struct damon_target *t;
++	struct damon_region *r, *next;
+ 
+ 	pr_info("kdamond (%d) starts\n", ctx->kdamond->pid);
+ 
+@@ -287,6 +415,8 @@ static int kdamond_fn(void *data)
+ 			if (ctx->callback.after_aggregation &&
+ 					ctx->callback.after_aggregation(ctx))
+ 				set_kdamond_stop(ctx);
++			if (ctx->target_type != DAMON_ARBITRARY_TARGET)
++				kdamond_reset_aggregated(ctx);
+ 			if (ctx->primitive.reset_aggregated)
+ 				ctx->primitive.reset_aggregated(ctx);
+ 		}
+@@ -296,6 +426,12 @@ static int kdamond_fn(void *data)
+ 				ctx->primitive.update_target_regions(ctx);
+ 		}
+ 	}
++	if (ctx->target_type != DAMON_ARBITRARY_TARGET) {
++		damon_for_each_target(t, ctx) {
++			damon_for_each_region_safe(r, next, t)
++				damon_destroy_region(r);
++		}
++	}
+ 
+ 	if (ctx->callback.before_terminate &&
+ 			ctx->callback.before_terminate(ctx))
+-- 
+2.17.1
+

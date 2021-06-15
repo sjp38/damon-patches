@@ -1,0 +1,137 @@
+From 95bc97f4e3ac4fd718d8cd24902d9dc5482b990e Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Sun, 2 Feb 2020 23:58:16 +0000
+Subject: [PATCH v20 08/15] mm/damon: Add a tracepoint
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    aarcange@redhat.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendan.d.gregg@gmail.com,
+    brendanhiggins@google.com,
+    cai@lca.pw,
+    colin.king@canonical.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    gthelen@google.com,
+    irogers@google.com,
+    jolsa@redhat.com,
+    kirill@shutemov.name,
+    mark.rutland@arm.com,
+    mgorman@suse.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    rdunlap@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    sblbir@amazon.com,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sj38.park@gmail.com,
+    snu@amazon.de,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    yang.shi@linux.alibaba.com,
+    ying.huang@intel.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+This commit adds a tracepoint for DAMON.  It traces the monitoring
+results of each region for each aggregation interval.  Using this, DAMON
+can easily integrated with tracepoints supporting tools such as perf.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+Reviewed-by: Leonard Foerster <foersleo@amazon.de>
+Reviewed-by: Steven Rostedt (VMware) <rostedt@goodmis.org>
+---
+ include/trace/events/damon.h | 43 ++++++++++++++++++++++++++++++++++++
+ mm/damon.c                   |  4 ++++
+ 2 files changed, 47 insertions(+)
+ create mode 100644 include/trace/events/damon.h
+
+diff --git a/include/trace/events/damon.h b/include/trace/events/damon.h
+new file mode 100644
+index 000000000000..2f422f4f1fb9
+--- /dev/null
++++ b/include/trace/events/damon.h
+@@ -0,0 +1,43 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++#undef TRACE_SYSTEM
++#define TRACE_SYSTEM damon
++
++#if !defined(_TRACE_DAMON_H) || defined(TRACE_HEADER_MULTI_READ)
++#define _TRACE_DAMON_H
++
++#include <linux/damon.h>
++#include <linux/types.h>
++#include <linux/tracepoint.h>
++
++TRACE_EVENT(damon_aggregated,
++
++	TP_PROTO(struct damon_target *t, struct damon_region *r,
++		unsigned int nr_regions),
++
++	TP_ARGS(t, r, nr_regions),
++
++	TP_STRUCT__entry(
++		__field(unsigned long, target_id)
++		__field(unsigned int, nr_regions)
++		__field(unsigned long, start)
++		__field(unsigned long, end)
++		__field(unsigned int, nr_accesses)
++	),
++
++	TP_fast_assign(
++		__entry->target_id = t->id;
++		__entry->nr_regions = nr_regions;
++		__entry->start = r->ar.start;
++		__entry->end = r->ar.end;
++		__entry->nr_accesses = r->nr_accesses;
++	),
++
++	TP_printk("target_id=%lu nr_regions=%u %lu-%lu: %u",
++			__entry->target_id, __entry->nr_regions,
++			__entry->start, __entry->end, __entry->nr_accesses)
++);
++
++#endif /* _TRACE_DAMON_H */
++
++/* This part must be outside protection */
++#include <trace/define_trace.h>
+diff --git a/mm/damon.c b/mm/damon.c
+index fed35f7b3879..e52e107c90fd 100644
+--- a/mm/damon.c
++++ b/mm/damon.c
+@@ -32,6 +32,9 @@
+ #include <linux/sched/task.h>
+ #include <linux/slab.h>
+ 
++#define CREATE_TRACE_POINTS
++#include <trace/events/damon.h>
++
+ /* Minimal region size.  Every damon_region is aligned by this. */
+ #define MIN_REGION PAGE_SIZE
+ 
+@@ -870,6 +873,7 @@ static void kdamond_reset_aggregated(struct damon_ctx *c)
+ 			damon_write_rbuf(c, &r->ar.end, sizeof(r->ar.end));
+ 			damon_write_rbuf(c, &r->nr_accesses,
+ 					sizeof(r->nr_accesses));
++			trace_damon_aggregated(t, r, nr);
+ 			r->nr_accesses = 0;
+ 		}
+ 	}
+-- 
+2.17.1
+

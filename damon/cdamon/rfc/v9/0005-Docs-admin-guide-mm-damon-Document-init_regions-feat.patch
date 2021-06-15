@@ -1,0 +1,122 @@
+From 2283b8b664e6099e3d2ecb80c925fc1d838f88fd Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Tue, 21 Jul 2020 08:20:46 +0000
+Subject: [RFC v9 05/10] Docs/admin-guide/mm/damon: Document 'init_regions'
+ feature
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    aarcange@redhat.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendan.d.gregg@gmail.com,
+    brendanhiggins@google.com,
+    cai@lca.pw,
+    colin.king@canonical.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    elver@google.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    gthelen@google.com,
+    irogers@google.com,
+    jolsa@redhat.com,
+    kirill@shutemov.name,
+    mark.rutland@arm.com,
+    mgorman@suse.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    rdunlap@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    sblbir@amazon.com,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sj38.park@gmail.com,
+    snu@amazon.de,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    yang.shi@linux.alibaba.com,
+    ying.huang@intel.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+This commit adds description of the 'init_regions' feature in the DAMON
+usage document.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+---
+ Documentation/admin-guide/mm/damon/usage.rst | 41 +++++++++++++++++++-
+ 1 file changed, 39 insertions(+), 2 deletions(-)
+
+diff --git a/Documentation/admin-guide/mm/damon/usage.rst b/Documentation/admin-guide/mm/damon/usage.rst
+index 96278227f925..cf0d44ce0ac9 100644
+--- a/Documentation/admin-guide/mm/damon/usage.rst
++++ b/Documentation/admin-guide/mm/damon/usage.rst
+@@ -281,8 +281,9 @@ for at least 100 milliseconds using below commands::
+ debugfs Interface
+ =================
+ 
+-DAMON exports five files, ``attrs``, ``target_ids``, ``record``, ``schemes``
+-and ``monitor_on`` under its debugfs directory, ``<debugfs>/damon/``.
++DAMON exports six files, ``attrs``, ``target_ids``, ``init_regions``,
++``record``, ``schemes`` and ``monitor_on`` under its debugfs directory,
++``<debugfs>/damon/``.
+ 
+ 
+ Attributes
+@@ -321,6 +322,42 @@ check it again::
+ Note that setting the target ids doesn't start the monitoring.
+ 
+ 
++Initial Monitoring Target Regions
++---------------------------------
++
++In case of the debugfs based monitoring, DAMON automatically sets and updates
++the monitoring target regions so that entire memory mappings of target
++processes can be covered. However, users might want to limit the monitoring
++region to specific address ranges, such as the heap, the stack, or specific
++file-mapped area.  Or, some users might know the initial access pattern of
++their workloads and therefore want to set optimal initial regions for the
++'adaptive regions adjustment'.
++
++In such cases, users can explicitly set the initial monitoring target regions
++as they want, by writing proper values to the ``init_regions`` file.  Each line
++of the input should represent one region in below form.::
++
++    <target id> <start address> <end address>
++
++The ``target id`` should already in ``target_ids`` file, and the regions should
++be passed in address order.  For example, below commands will set a couple of
++address ranges, ``1-100`` and ``100-200`` as the initial monitoring target
++region of process 42, and another couple of address ranges, ``20-40`` and
++``50-100`` as that of process 4242.::
++
++    # cd <debugfs>/damon
++    # echo "42   1       100
++            42   100     200
++            4242 20      40
++            4242 50      100" > init_regions
++
++Note that this sets the initial monitoring target regions only.  In case of
++virtual memory monitoring, DAMON will automatically updates the boundary of the
++regions after one ``regions update interval``.  Therefore, users should set the
++``regions update interval`` large enough in this case, if they don't want the
++update.
++
++
+ Record
+ ------
+ 
+-- 
+2.17.1
+
