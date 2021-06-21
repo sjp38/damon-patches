@@ -49,6 +49,7 @@ Compared to the v30
 (https://lore.kernel.org/linux-mm/20210616073119.16758-1-sj38.park@gmail.com/),
 this version contains below minor changes.
 
+- Rebase on latest -mm tree (v5.13-rc6-mmots-2021-06-16-22-17)
 - selftest: Fix wrong file content comparison (Markus Boehme)
 - Collect 'Reviewed-by:' tags from Markus
 
@@ -443,6 +444,7 @@ Patch History
 
 Changes from v30
 (https://lore.kernel.org/linux-mm/20210616073119.16758-1-sj38.park@gmail.com/)
+- Rebase on latest -mm tree (v5.13-rc6-mmots-2021-06-16-22-17)
 - selftest: Fix wrong file content comparison (Markus Boehme)
 - Collect 'Reviewed-by:' tags from Markus
 
