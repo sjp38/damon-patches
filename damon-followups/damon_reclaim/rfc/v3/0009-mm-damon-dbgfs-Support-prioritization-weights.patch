@@ -1,0 +1,105 @@
+From daa4c23b7fd9fbb044b3caa84ec4744d76381971 Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Mon, 12 Jul 2021 14:09:13 +0000
+Subject: [RFC v3 09/15] mm/damon/dbgfs: Support prioritization weights
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendanhiggins@google.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    elver@google.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    greg@kroah.com,
+    gthelen@google.com,
+    guoju.fgj@alibaba-inc.com,
+    jgowans@amazon.com,
+    joe@perches.com,
+    mgorman@suse.de,
+    mheyne@amazon.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sieberf@amazon.com,
+    sj38.park@gmail.com,
+    snu@zelle79.org,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+This commit allows DAMON debugfs interface users set the prioritization
+weights by putting three more numbers to the 'schemes' file.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+---
+ mm/damon/dbgfs.c | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/mm/damon/dbgfs.c b/mm/damon/dbgfs.c
+index 3cd253a07116..93ac15cb5786 100644
+--- a/mm/damon/dbgfs.c
++++ b/mm/damon/dbgfs.c
+@@ -227,13 +227,16 @@ static ssize_t sprint_schemes(struct damon_ctx *c, char *buf, ssize_t len)
+ 
+ 	damon_for_each_scheme(s, c) {
+ 		rc = scnprintf(&buf[written], len - written,
+-				"%lu %lu %u %u %u %u %d %lu %lu %lu %lu %lu\n",
++				"%lu %lu %u %u %u %u %d %lu %lu %lu %u %u %u %lu %lu\n",
+ 				s->min_sz_region, s->max_sz_region,
+ 				s->min_nr_accesses, s->max_nr_accesses,
+ 				s->min_age_region, s->max_age_region,
+ 				s->action,
+ 				s->quota.ms, s->quota.sz,
+ 				s->quota.reset_interval,
++				s->quota.weight_sz,
++				s->quota.weight_nr_accesses,
++				s->quota.weight_age,
+ 				s->stat_count, s->stat_sz);
+ 		if (!rc)
+ 			return -ENOMEM;
+@@ -315,11 +318,14 @@ static struct damos **str_to_schemes(const char *str, ssize_t len,
+ 	while (pos < len && *nr_schemes < max_nr_schemes) {
+ 		struct damos_quota quota = {};
+ 
+-		ret = sscanf(&str[pos], "%lu %lu %u %u %u %u %u %lu %lu %lu%n",
++		ret = sscanf(&str[pos],
++				"%lu %lu %u %u %u %u %u %lu %lu %lu %u %u %u%n",
+ 				&min_sz, &max_sz, &min_nr_a, &max_nr_a,
+ 				&min_age, &max_age, &action, &quota.ms,
+-				&quota.sz, &quota.reset_interval, &parsed);
+-		if (ret != 10)
++				&quota.sz, &quota.reset_interval,
++				&quota.weight_sz, &quota.weight_nr_accesses,
++				&quota.weight_age, &parsed);
++		if (ret != 13)
+ 			break;
+ 		if (!damos_action_valid(action)) {
+ 			pr_err("wrong action %d\n", action);
+@@ -1147,7 +1153,7 @@ static ssize_t dbgfs_monitor_on_write(struct file *file,
+ static ssize_t dbgfs_version_read(struct file *file,
+ 		char __user *buf, size_t count, loff_t *ppos)
+ {
+-	return simple_read_from_buffer(buf, count, ppos, "1\n", 2);
++	return simple_read_from_buffer(buf, count, ppos, "2\n", 2);
+ }
+ 
+ static const struct file_operations mk_contexts_fops = {
+-- 
+2.17.1
+
