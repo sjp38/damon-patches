@@ -1,0 +1,71 @@
+From f2adc44f46ca4efab7fa3e461953d16e79169ab1 Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Fri, 6 Aug 2021 09:25:23 +0000
+Subject: [PATCH 1/2] mm/PAGE_IDLE_FLAG: Set PAGE_EXTENSION for none-64BIT
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+To: akpm@linux-foundation.org
+Cc: rdunlap@infradead.org,
+    broonie@kernel.org,
+    linux-fsdevel@vger.kernel.org,
+    linux-kernel@vger.kernel.org,
+    linux-mm@kvack.org,
+    linux-next@vger.kernel.org,
+    mhocko@suse.cz,
+    mm-commits@vger.kernel.org,
+    sfr@canb.auug.org.au,
+    willy@infradead.org,
+    linux-damon@amazon.com
+
+Commit 128fd80c4c07 ("mm/idle_page_tracking: Make PG_idle reusable") of
+linux-mm[1] allows PAGE_IDLE_FLAG to be set without PAGE_EXTENSION
+while 64BIT is not set.  This makes 'enum page_ext_flags' undefined, so
+build fails as below for the config (!64BIT, !PAGE_EXTENSION, and
+IDLE_PAGE_FLAG).
+
+    $ make ARCH=i386 allnoconfig
+    $ echo 'CONFIG_PAGE_IDLE_FLAG=y' >> .config
+    $ make olddefconfig
+    $ make ARCH=i386
+    [...]
+    ../include/linux/page_idle.h: In function ‘folio_test_young’:
+    ../include/linux/page_idle.h:25:18: error: ‘PAGE_EXT_YOUNG’ undeclared (first use in this function); did you mean ‘PAGEOUTRUN’?
+       return test_bit(PAGE_EXT_YOUNG, &page_ext->flags);
+    [...]
+
+This commit fixes this issue by making PAGE_EXTENSION to be set when
+64BIT is not set and PAGE_IDLE_FLAG is set.
+
+[1] https://github.com/hnaz/linux-mm/commit/128fd80c4c07
+
+Fixes: 128fd80c4c07 ("mm/idle_page_tracking: Make PG_idle reusable")
+Reported-by: Randy Dunlap <rdunlap@infradead.org>
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+---
+ mm/Kconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mm/Kconfig b/mm/Kconfig
+index d0b85dc12429..50ca602edeb6 100644
+--- a/mm/Kconfig
++++ b/mm/Kconfig
+@@ -741,6 +741,7 @@ config DEFERRED_STRUCT_PAGE_INIT
+ 
+ config PAGE_IDLE_FLAG
+ 	bool "Add PG_idle and PG_young flags"
++	select PAGE_EXTENSION if !64BIT
+ 	help
+ 	  This feature adds PG_idle and PG_young flags in 'struct page'.  PTE
+ 	  Accessed bit writers can set the state of the bit in the flags to let
+@@ -749,7 +750,6 @@ config PAGE_IDLE_FLAG
+ config IDLE_PAGE_TRACKING
+ 	bool "Enable idle page tracking"
+ 	depends on SYSFS && MMU && BROKEN
+-	select PAGE_EXTENSION if !64BIT
+ 	select PAGE_IDLE_FLAG
+ 	help
+ 	  This feature allows to estimate the amount of user pages that have
+-- 
+2.17.1
+
