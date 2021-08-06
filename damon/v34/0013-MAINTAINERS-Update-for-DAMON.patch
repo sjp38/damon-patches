@@ -1,0 +1,78 @@
+From b983cf52d2a0e62855d5092424098ebb621f0834 Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Mon, 3 Feb 2020 00:19:16 +0000
+Subject: [PATCH v34 13/13] MAINTAINERS: Update for DAMON
+To: akpm@linux-foundation.org
+Cc: Jonathan.Cameron@Huawei.com,
+    acme@kernel.org,
+    alexander.shishkin@linux.intel.com,
+    amit@kernel.org,
+    benh@kernel.crashing.org,
+    brendanhiggins@google.com,
+    corbet@lwn.net,
+    david@redhat.com,
+    dwmw@amazon.com,
+    elver@google.com,
+    fan.du@intel.com,
+    foersleo@amazon.de,
+    greg@kroah.com,
+    gthelen@google.com,
+    guoju.fgj@alibaba-inc.com,
+    jgowans@amazon.com,
+    joe@perches.com,
+    mgorman@suse.de,
+    mheyne@amazon.de,
+    minchan@kernel.org,
+    mingo@redhat.com,
+    namhyung@kernel.org,
+    peterz@infradead.org,
+    riel@surriel.com,
+    rientjes@google.com,
+    rostedt@goodmis.org,
+    rppt@kernel.org,
+    shakeelb@google.com,
+    shuah@kernel.org,
+    sieberf@amazon.com,
+    sj38.park@gmail.com,
+    snu@zelle79.org,
+    vbabka@suse.cz,
+    vdavydov.dev@gmail.com,
+    zgf574564920@gmail.com,
+    linux-damon@amazon.com,
+    linux-mm@kvack.org,
+    linux-doc@vger.kernel.org,
+    linux-kernel@vger.kernel.org
+
+This commit updates MAINTAINERS file for DAMON related files.
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+Reviewed-by: Markus Boehme <markubo@amazon.de>
+---
+ MAINTAINERS | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/MAINTAINERS b/MAINTAINERS
+index 13ec37ac23c7..1e56c3fe1bd3 100644
+--- a/MAINTAINERS
++++ b/MAINTAINERS
+@@ -5128,6 +5128,17 @@ F:	net/ax25/ax25_out.c
+ F:	net/ax25/ax25_timer.c
+ F:	net/ax25/sysctl_net_ax25.c
+ 
++DATA ACCESS MONITOR
++M:	SeongJae Park <sjpark@amazon.de>
++L:	linux-mm@kvack.org
++S:	Maintained
++F:	Documentation/admin-guide/mm/damon/
++F:	Documentation/vm/damon/
++F:	include/linux/damon.h
++F:	include/trace/events/damon.h
++F:	mm/damon/
++F:	tools/testing/selftests/damon/
++
+ DAVICOM FAST ETHERNET (DMFE) NETWORK DRIVER
+ L:	netdev@vger.kernel.org
+ S:	Orphan
+-- 
+2.17.1
+
