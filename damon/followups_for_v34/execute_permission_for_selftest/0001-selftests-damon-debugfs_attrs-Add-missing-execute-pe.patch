@@ -1,0 +1,35 @@
+From 0bcbef489ee2b5dfa74fcd603d6ea3a2c9fc30bc Mon Sep 17 00:00:00 2001
+From: SeongJae Park <sjpark@amazon.de>
+Date: Tue, 10 Aug 2021 10:01:50 +0000
+Subject: [PATCH] selftests/damon/debugfs_attrs: Add missing execute permission
+
+Commit 04edafbc0c07 ("mm/damon: add user space selftests") of
+linux-mm[1] gives no execute permission to 'debugfs_attrs.sh' file.
+This results in a DAMON selftest failure as below:
+
+    $ make -C tools/testing/selftests/damon run_tests
+    make: Entering directory '/home/sjpark/linux/tools/testing/selftests/damon'
+    TAP version 13
+    1..1
+    # selftests: damon: debugfs_attrs.sh
+    # Warning: file debugfs_attrs.sh is not executable, correct this.
+    not ok 1 selftests: damon: debugfs_attrs.sh
+    make: Leaving directory '/home/sjpark/linux/tools/testing/selftests/damon'
+
+To solve the problem, this commit adds the execute permission for
+'debugfs_attrs.sh' file.
+
+[1] https://github.com/hnaz/linux-mm/commit/04edafbc0c07
+
+Signed-off-by: SeongJae Park <sjpark@amazon.de>
+---
+ tools/testing/selftests/damon/debugfs_attrs.sh | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ mode change 100644 => 100755 tools/testing/selftests/damon/debugfs_attrs.sh
+
+diff --git a/tools/testing/selftests/damon/debugfs_attrs.sh b/tools/testing/selftests/damon/debugfs_attrs.sh
+old mode 100644
+new mode 100755
+-- 
+2.17.1
+
